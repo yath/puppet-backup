@@ -1,0 +1,42 @@
+#!/bin/sh
+. /root/scripts/backup-client.params
+
+# we need this so paramiko finds our ~/.ssh/known_hosts file
+export HOME=/root
+
+logfile="$(tempfile)"
+trap "rm -f '$logfile'" EXIT
+
+( if ! flock -nx 9; then #) <- make vim happy
+    echo "Backup already running; exiting" >&2
+    exit 0
+fi
+
+<% if @nolargerthan -%>
+
+echo "Excluding files larger than <%= @nolargerthan %>:"
+largefiles="$(mktemp)"
+find <%= @include.join(" ") %> -size +<%= @nolargerthan %> | tee "$largefiles"
+<% @includeexclude.unshift('--exclude-filelist="$largefiles"') -%>
+<% end -%>
+
+<% if @keep -%>
+duplicity remove-older-than <%= @keep %> --force "$REMOTE"
+<% end -%>
+duplicity cleanup --force "$REMOTE"
+duplicity --full-if-older-than <%= @fullevery %> --volsize 250 <%= @includeexclude.join(" ") %> -v<%= @verbosity %> <%= @extraopts %> / "$REMOTE"
+
+<% if @nolargerthan -%>
+rm -f "$largefiles"
+<% end -%>
+) 9> "$HOME"/backup-client.lock > "$logfile" 2>&1
+rc="$?"
+
+if [ "$rc" -ne 0 ] || ! grep -q '^Errors 0$' "$logfile"; then
+    cat "$logfile"
+fi
+
+logger -t backup < "$logfile"
+
+exit "$rc"
+# vim:syn=sh

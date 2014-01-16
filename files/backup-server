@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+SRCDIR=/backup
+DSTDIR=/backup_remote
+REMOTE="u65752@u65752.your-backup.de:"
+
+if [ -d "$DSTDIR" ] && mountpoint -q "$DSTDIR"; then
+    echo "$DSTDIR already mounted, aborting" >&2
+    exit 1
+fi
+
+mkdir -p "$DSTDIR"
+sshfs "$REMOTE" "$DSTDIR"
+rsync --delete -rtP "$SRCDIR"/ "$DSTDIR"/
+fusermount -u "$DSTDIR"
+
+# vim:syn=sh
